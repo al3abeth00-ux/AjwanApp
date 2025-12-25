@@ -24,25 +24,50 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Prepare Environment & Stabilize Versions
+    - name: Prepare & Force Dependencies
       run: |
-        # 1. تثبيت الأدوات
+        # 1. التجهيز المعتاد
         npm init -y
         npm install @capacitor/android @capacitor/core @capacitor/cli
         
-        # 2. ملفات التكوين الوهمية
         echo '{"appId":"com.ajwan.app","appName":"Ajwan","webDir":"www","bundledWebRuntime":false}' > capacitor.config.json
         mkdir www && echo '<h1>Ajwan</h1>' > www/index.html
         echo '{ "project_info": { "project_number": "0", "project_id": "m", "storage_bucket": "m" }, "client": [{ "client_info": { "mobilesdk_app_id": "1:0:android:0", "android_client_info": { "package_name": "com.ajwan.app" } }, "api_key": [{ "current_key": "m" }] }] }' > android/app/google-services.json
 
-        # 3. الربط الأولي
         npx cap sync android
 
         # =======================================================
-        # 🚨 كتابة ملف variables.gradle نظيف ومستقر 🚨
-        # هذا يمنع Gradle من تحميل مكتبات حديثة جداً تكسر البناء
+        # 🚨 القبضة الحديدية: إجبار التوافق (Force Resolution) 🚨
+        # سنحقن كوداً في build.gradle يجبره على استخدام نسخ محددة
         # =======================================================
-        cat <<EOT > android/variables.gradle
+        
+        cat <<EOG >> android/build.gradle
+
+        allprojects {
+            configurations.all {
+                resolutionStrategy {
+                    // إجبار استخدام إصدارات مستقرة ومعروفة
+                    force 'androidx.core:core:1.12.0'
+                    force 'androidx.core:core-ktx:1.12.0'
+                    force 'androidx.appcompat:appcompat:1.6.1'
+                    force 'androidx.activity:activity:1.8.0'
+                    force 'androidx.fragment:fragment:1.6.2'
+                    force 'androidx.lifecycle:lifecycle-viewmodel:2.6.2'
+                    force 'androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2'
+                    force 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
+                    force 'androidx.work:work-runtime:2.9.0'
+                    force 'com.google.android.material:material:1.10.0'
+                }
+            }
+        }
+        EOG
+
+        # 2. ترقية AGP و Gradle (ضروري جداً)
+        sed -i 's/classpath "com.android.tools.build:gradle:.*"/classpath "com.android.tools.build:gradle:8.3.2"/g' android/build.gradle
+        sed -i 's/8.2/8.7/g' android/gradle/wrapper/gradle-wrapper.properties
+
+        # 3. التأكد من SDK 34
+        cat <<EOV > android/variables.gradle
         ext {
             minSdkVersion = 23
             compileSdkVersion = 34
@@ -57,22 +82,16 @@ jobs:
             androidxEspressoCoreVersion = '3.5.1'
             cordovaAndroidVersion = '10.1.1'
         }
-        EOT
-
-        # 4. ترقية Android Gradle Plugin ليتوافق مع Gradle 8.7
-        sed -i 's/classpath "com.android.tools.build:gradle:.*"/classpath "com.android.tools.build:gradle:8.3.2"/g' android/build.gradle
-
-        # 5. إصلاح توافق جافا في مكتبات Capacitor
+        EOV
+        
+        # 4. إصلاح مكتبات الكابستور
         find node_modules -name build.gradle -exec sed -i 's/VERSION_21/VERSION_17/g' {} +
-
-        # 6. ترقية محرك Gradle إلى 8.7
-        sed -i 's/8.2/8.7/g' android/gradle/wrapper/gradle-wrapper.properties
 
     - name: Build with Gradle
       run: |
         cd android
         chmod +x gradlew
-        # --stacktrace ضروري لرؤية الخطأ لو حدث
+        # --stacktrace + --info لنرى ماذا يحدث بالتفصيل
         ./gradlew assembleDebug -x lint --no-daemon --no-parallel -g ./local_cache --stacktrace
 
     - name: Upload APK
