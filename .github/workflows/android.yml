@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. نضع كود الأندرويد في مكانه الصحيح
+    # 1. نضع كود الأندرويد داخل مجلد فرعي اسمه android
     - uses: actions/checkout@v4
       with:
         path: android
@@ -25,14 +25,13 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Reconstruct Missing Environment
+    - name: Reconstruct Environment & CLI
       run: |
-        # 1. تثبيت المكتبات الأساسية
+        # 1. تثبيت الأدوات: هنا أضفنا @capacitor/cli (الأداة الناقصة)
         npm init -y
-        npm install @capacitor/android @capacitor/core
+        npm install @capacitor/android @capacitor/core @capacitor/cli
         
-        # 2. (مهم جداً) إنشاء ملف إعدادات Capacitor المفقود
-        # سنفترض أن اسم الباكيج هو com.ajwan.app (يمكنك تغييره لاحقاً)
+        # 2. إنشاء ملف إعدادات Capacitor لربط الرأس بالجسد
         echo '{
           "appId": "com.ajwan.app",
           "appName": "Ajwan",
@@ -40,24 +39,24 @@ jobs:
           "bundledWebRuntime": false
         }' > capacitor.config.json
 
-        # 3. (مهم جداً) إنشاء مجلد الموقع الوهمي الذي يبحث عنه Gradle
+        # 3. إنشاء مجلد الموقع الوهمي
         mkdir www
-        echo '<h1>Ajwan App</h1>' > www/index.html
+        echo '<h1>Ajwan</h1>' > www/index.html
 
-        # 4. إصلاح مشكلة إصدار جافا 21
+        # 4. إصلاح مشكلة إصدار جافا في المكتبات المحملة حديثاً
         find node_modules -name build.gradle -exec sed -i 's/VERSION_21/VERSION_17/g' {} +
 
-        # 5. دمج الرأس مع الجسد (هذه الخطوة تصلح ملفات Gradle تلقائياً)
+        # 5. تنفيذ الربط (الآن سيعمل لأننا حملنا الـ CLI)
         npx cap sync android
 
-        # 6. إنشاء ملف google-services.json وهمي (احتياط)
-        echo '{ "project_info": { "project_number": "000000000000", "project_id": "mock", "storage_bucket": "mock" }, "client": [{ "client_info": { "mobilesdk_app_id": "1:000:android:000", "android_client_info": { "package_name": "com.ajwan.app" } }, "api_key": [{ "current_key": "mock" }] }] }' > android/app/google-services.json
+        # 6. إنشاء ملف google-services.json وهمي
+        echo '{ "project_info": { "project_number": "0000", "project_id": "mock", "storage_bucket": "mock" }, "client": [{ "client_info": { "mobilesdk_app_id": "1:000:android:000", "android_client_info": { "package_name": "com.ajwan.app" } }, "api_key": [{ "current_key": "mock" }] }] }' > android/app/google-services.json
 
     - name: Build with Gradle
       run: |
         cd android
         chmod +x gradlew
-        # تجاهل أخطاء Lint الصارمة
+        # نتجاهل الأخطاء غير المؤثرة (lint)
         ./gradlew assembleDebug -x lint --no-daemon
 
     - name: Upload APK
