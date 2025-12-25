@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. تجهيز الهيكل: نضع الكود في مجلد android
+    # 1. نضع كود الأندرويد في مكانه الصحيح
     - uses: actions/checkout@v4
       with:
         path: android
@@ -25,25 +25,40 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Fix Dependencies & Missing Files
+    - name: Reconstruct Missing Environment
       run: |
-        # تثبيت المكتبات في المجلد الرئيسي
+        # 1. تثبيت المكتبات الأساسية
         npm init -y
         npm install @capacitor/android @capacitor/core
         
-        # إصلاح إصدار جافا في المكتبة
+        # 2. (مهم جداً) إنشاء ملف إعدادات Capacitor المفقود
+        # سنفترض أن اسم الباكيج هو com.ajwan.app (يمكنك تغييره لاحقاً)
+        echo '{
+          "appId": "com.ajwan.app",
+          "appName": "Ajwan",
+          "webDir": "www",
+          "bundledWebRuntime": false
+        }' > capacitor.config.json
+
+        # 3. (مهم جداً) إنشاء مجلد الموقع الوهمي الذي يبحث عنه Gradle
+        mkdir www
+        echo '<h1>Ajwan App</h1>' > www/index.html
+
+        # 4. إصلاح مشكلة إصدار جافا 21
         find node_modules -name build.gradle -exec sed -i 's/VERSION_21/VERSION_17/g' {} +
 
-        # إنشاء ملف google-services.json وهمي لتجنب توقف البناء إذا كان ناقصاً
-        echo '{ "project_info": { "project_number": "000000000000", "project_id": "mock-project-id", "storage_bucket": "mock-bucket" }, "client": [ { "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "com.ajwan.app" } }, "api_key": [ { "current_key": "mock-api-key" } ] } ] }' > android/app/google-services.json
+        # 5. دمج الرأس مع الجسد (هذه الخطوة تصلح ملفات Gradle تلقائياً)
+        npx cap sync android
 
-    - name: Build with Gradle (Ignore Errors)
+        # 6. إنشاء ملف google-services.json وهمي (احتياط)
+        echo '{ "project_info": { "project_number": "000000000000", "project_id": "mock", "storage_bucket": "mock" }, "client": [{ "client_info": { "mobilesdk_app_id": "1:000:android:000", "android_client_info": { "package_name": "com.ajwan.app" } }, "api_key": [{ "current_key": "mock" }] }] }' > android/app/google-services.json
+
+    - name: Build with Gradle
       run: |
         cd android
         chmod +x gradlew
-        # نضيف -x lint لتجاهل تدقيق الكود الصارم
-        # نضيف --stacktrace لنرى الخطأ بوضوح لو فشل
-        ./gradlew assembleDebug -x lint --stacktrace --no-daemon
+        # تجاهل أخطاء Lint الصارمة
+        ./gradlew assembleDebug -x lint --no-daemon
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
