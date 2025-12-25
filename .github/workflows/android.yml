@@ -11,7 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 1. الخدعة هنا: نضع كودك داخل مجلد فرعي اسمه android
+    # لكي يصبح الهيكل مطابقاً لما يتوقعه Gradle
     - uses: actions/checkout@v4
+      with:
+        path: android
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -24,23 +28,19 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Fix Project Structure & Dependencies
+    - name: Install Dependencies in Root
       run: |
-        # 1. إنشاء ملف package.json وهمي لأننا رفعنا مجلد أندرويد فقط
+        # نحن الآن في المجلد الرئيسي (فارغ)، وكودك في android
+        # سنحمل المكتبات هنا لتكون في (../node_modules) بالنسبة لكودك
         npm init -y
-        
-        # 2. تحميل مكتبة Capacitor الأساسية التي يبحث عنها النظام
         npm install @capacitor/android @capacitor/core
-
-        # 3. تعديل settings.gradle ليبحث عن المكتبة في المجلد الحالي بدلاً من المجلد السابق
-        # (نغير .. إلى . في المسار)
-        sed -i "s|../node_modules|./node_modules|g" settings.gradle
-
-        # 4. إصلاح مشكلة Java 21 العنيدة في المكتبة المحملة
+        
+        # إصلاح مشكلة Java 21 في المكتبة المحملة
         find node_modules -name build.gradle -exec sed -i 's/VERSION_21/VERSION_17/g' {} +
 
     - name: Build with Gradle
       run: |
+        cd android
         chmod +x gradlew
         ./gradlew assembleDebug --no-daemon
 
@@ -48,4 +48,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Ajwan-App-Debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
