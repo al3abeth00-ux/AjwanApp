@@ -24,16 +24,23 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Install Dependencies and Fix Java Version
+    - name: Fix Project Structure & Dependencies
       run: |
-        npm install
-        # هنا نقوم بإصلاح المشكلة تلقائيا كما فعلنا يدويا
-        sed -i 's/VERSION_21/VERSION_17/g' node_modules/@capacitor/android/capacitor/build.gradle
-        npx cap sync android
+        # 1. إنشاء ملف package.json وهمي لأننا رفعنا مجلد أندرويد فقط
+        npm init -y
+        
+        # 2. تحميل مكتبة Capacitor الأساسية التي يبحث عنها النظام
+        npm install @capacitor/android @capacitor/core
+
+        # 3. تعديل settings.gradle ليبحث عن المكتبة في المجلد الحالي بدلاً من المجلد السابق
+        # (نغير .. إلى . في المسار)
+        sed -i "s|../node_modules|./node_modules|g" settings.gradle
+
+        # 4. إصلاح مشكلة Java 21 العنيدة في المكتبة المحملة
+        find node_modules -name build.gradle -exec sed -i 's/VERSION_21/VERSION_17/g' {} +
 
     - name: Build with Gradle
       run: |
-        cd android
         chmod +x gradlew
         ./gradlew assembleDebug --no-daemon
 
@@ -41,4 +48,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Ajwan-App-Debug
-        path: android/app/build/outputs/apk/debug/app-debug.apk
+        path: app/build/outputs/apk/debug/app-debug.apk
