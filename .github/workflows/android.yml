@@ -24,13 +24,13 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Prepare Environment & Fix Versions
+    - name: Prepare Environment & Stabilize Versions
       run: |
         # 1. تثبيت الأدوات
         npm init -y
         npm install @capacitor/android @capacitor/core @capacitor/cli
         
-        # 2. إنشاء ملفات التكوين الوهمية
+        # 2. ملفات التكوين الوهمية
         echo '{"appId":"com.ajwan.app","appName":"Ajwan","webDir":"www","bundledWebRuntime":false}' > capacitor.config.json
         mkdir www && echo '<h1>Ajwan</h1>' > www/index.html
         echo '{ "project_info": { "project_number": "0", "project_id": "m", "storage_bucket": "m" }, "client": [{ "client_info": { "mobilesdk_app_id": "1:0:android:0", "android_client_info": { "package_name": "com.ajwan.app" } }, "api_key": [{ "current_key": "m" }] }] }' > android/app/google-services.json
@@ -39,32 +39,41 @@ jobs:
         npx cap sync android
 
         # =======================================================
-        # 🚨 منطقة الإصلاحات الجذرية للإصدارات 🚨
+        # 🚨 كتابة ملف variables.gradle نظيف ومستقر 🚨
+        # هذا يمنع Gradle من تحميل مكتبات حديثة جداً تكسر البناء
         # =======================================================
+        cat <<EOT > android/variables.gradle
+        ext {
+            minSdkVersion = 23
+            compileSdkVersion = 34
+            targetSdkVersion = 34
+            androidxActivityVersion = '1.8.0'
+            androidxAppCompatVersion = '1.6.1'
+            androidxCoordinatorLayoutVersion = '1.2.0'
+            androidxCoreVersion = '1.12.0'
+            androidxFragmentVersion = '1.6.2'
+            coreSplashScreenVersion = '1.0.1'
+            androidxJunitVersion = '1.1.5'
+            androidxEspressoCoreVersion = '3.5.1'
+            cordovaAndroidVersion = '10.1.1'
+        }
+        EOT
 
-        # أ) إجبار المشروع على استخدام Android SDK 34 (المطلوب للمكتبات الحديثة)
-        # نقوم بالبحث في variables.gradle وتغيير القيم
-        sed -i 's/compileSdkVersion = .*/compileSdkVersion = 34/g' android/variables.gradle
-        sed -i 's/targetSdkVersion = .*/targetSdkVersion = 34/g' android/variables.gradle
-
-        # ب) ترقية Android Gradle Plugin ليتوافق مع Gradle 8.7
-        # نغيره إلى الإصدار 8.3.2 (المتوافق والمستقر)
+        # 4. ترقية Android Gradle Plugin ليتوافق مع Gradle 8.7
         sed -i 's/classpath "com.android.tools.build:gradle:.*"/classpath "com.android.tools.build:gradle:8.3.2"/g' android/build.gradle
 
-        # ج) إصلاح توافق جافا في مكتبات Capacitor
+        # 5. إصلاح توافق جافا في مكتبات Capacitor
         find node_modules -name build.gradle -exec sed -i 's/VERSION_21/VERSION_17/g' {} +
 
-        # د) ترقية محرك Gradle نفسه إلى 8.7
+        # 6. ترقية محرك Gradle إلى 8.7
         sed -i 's/8.2/8.7/g' android/gradle/wrapper/gradle-wrapper.properties
-        
-        # =======================================================
 
     - name: Build with Gradle
       run: |
         cd android
         chmod +x gradlew
-        # نستخدم الكاش المحلي ونوقف التوازي لتجنب المشاكل
-        ./gradlew assembleDebug -x lint --no-daemon --no-parallel -g ./local_cache
+        # --stacktrace ضروري لرؤية الخطأ لو حدث
+        ./gradlew assembleDebug -x lint --no-daemon --no-parallel -g ./local_cache --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
